@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	staminaCommon "github.com/ethereum/go-ethereum/stamina/common"
 )
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -340,6 +341,12 @@ func DeveloperGenesisBlock(period uint64, faucet common.Address) *Genesis {
 	config := *params.AllCliqueProtocolChanges
 	config.Clique.Period = period
 
+	var err error
+	staminaBinBytes, err := hex.DecodeString(staminaCommon.StaminaContractBin[2:])
+	if err != nil {
+		panic(err)
+	}
+
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
 	return &Genesis{
 		Config:     &config,
@@ -355,6 +362,10 @@ func DeveloperGenesisBlock(period uint64, faucet common.Address) *Genesis {
 			common.BytesToAddress([]byte{6}): {Balance: big.NewInt(1)}, // ECAdd
 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
+			staminaCommon.StaminaContractAddress: {
+				Code:    staminaBinBytes,
+				Balance: big.NewInt(0),
+			},
 			faucet: {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
 		},
 	}
