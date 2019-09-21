@@ -126,7 +126,7 @@ func (ecc *ECC) mine(block *types.Block, id int, seed uint64, abort chan struct{
 	// Extract some data from the header
 	var (
 		header = block.Header()
-		hash   = ecc.SealHash(header).Bytes()
+		//hash   = ecc.SealHash(header).Bytes()
 		//number  = header.Number.Uint64()
 		//target  = new(big.Int).Div(two256, header.Difficulty)
 
@@ -156,13 +156,13 @@ search:
 		}
 		// Compute the PoW value of this nonce
 
-		nonce, digest, matrix := RunLDPC(header.ParentHash.Bytes(), hash)
-		fmt.Print(matrix)
-
+		_, _, LDPCnonce := RunOptimizedConcurrencyLDPC(header)
+		//fmt.Print(matrix)
+		var tempDigest []byte
 		// Correct nonce found, create a new header with it
 		header = types.CopyHeader(header)
-		//header.Nonce = types.EncodeNonce(nonce)
-		header.MixDigest = common.BytesToHash(digest)
+		header.Nonce = types.EncodeNonce(LDPCnonce)
+		header.MixDigest = common.BytesToHash(tempDigest)
 
 		// Seal and return a block (if still needed)
 		select {

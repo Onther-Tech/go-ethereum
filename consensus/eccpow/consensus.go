@@ -32,7 +32,7 @@ import (
 	"github.com/Onther-Tech/go-ethereum/crypto/sha3"
 	"github.com/Onther-Tech/go-ethereum/params"
 	"github.com/Onther-Tech/go-ethereum/rlp"
-	"github.com/deckarep/golang-set"
+	mapset "github.com/deckarep/golang-set"
 )
 
 // ecc proof-of-work protocol constants.
@@ -326,63 +326,66 @@ var (
 // the difficulty is calculated with Byzantium rules, which differs from Homestead in
 // how uncles affect the calculation
 func makeDifficultyCalculator(bombDelay *big.Int) func(time uint64, parent *types.Header) *big.Int {
-	// Note, the calculations below looks at the parent number, which is 1 below
-	// the block number. Thus we remove one from the delay given
-	bombDelayFromParent := new(big.Int).Sub(bombDelay, big1)
-	return func(time uint64, parent *types.Header) *big.Int {
-		// https://github.com/Onther-Tech/EIPs/issues/100.
-		// algorithm:
-		// diff = (parent_diff +
-		//         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-		//        ) + 2^(periodCount - 2)
+	/*
+		// Note, the calculations below looks at the parent number, which is 1 below
+		// the block number. Thus we remove one from the delay given
+		bombDelayFromParent := new(big.Int).Sub(bombDelay, big1)
+		return func(time uint64, parent *types.Header) *big.Int {
+			// https://github.com/Onther-Tech/EIPs/issues/100.
+			// algorithm:
+			// diff = (parent_diff +
+			//         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
+			//        ) + 2^(periodCount - 2)
 
-		bigTime := new(big.Int).SetUint64(time)
-		bigParentTime := new(big.Int).Set(parent.Time)
+			bigTime := new(big.Int).SetUint64(time)
+			bigParentTime := new(big.Int).Set(parent.Time)
 
-		// holds intermediate values to make the algo easier to read & audit
-		x := new(big.Int)
-		y := new(big.Int)
+			// holds intermediate values to make the algo easier to read & audit
+			x := new(big.Int)
+			y := new(big.Int)
 
-		// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9
-		x.Sub(bigTime, bigParentTime)
-		x.Div(x, big9)
-		if parent.UncleHash == types.EmptyUncleHash {
-			x.Sub(big1, x)
-		} else {
-			x.Sub(big2, x)
-		}
-		// max((2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9, -99)
-		if x.Cmp(bigMinus99) < 0 {
-			x.Set(bigMinus99)
-		}
-		// parent_diff + (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
-		y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
-		x.Mul(y, x)
-		x.Add(parent.Difficulty, x)
+			// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9
+			x.Sub(bigTime, bigParentTime)
+			x.Div(x, big9)
+			if parent.UncleHash == types.EmptyUncleHash {
+				x.Sub(big1, x)
+			} else {
+				x.Sub(big2, x)
+			}
+			// max((2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9, -99)
+			if x.Cmp(bigMinus99) < 0 {
+				x.Set(bigMinus99)
+			}
+			// parent_diff + (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
+			y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
+			x.Mul(y, x)
+			x.Add(parent.Difficulty, x)
 
-		// minimum difficulty can ever be (before exponential factor)
-		if x.Cmp(params.MinimumDifficulty) < 0 {
-			x.Set(params.MinimumDifficulty)
-		}
-		// calculate a fake block number for the ice-age delay
-		// Specification: https://eips.ethereum.org/EIPS/eip-1234
-		fakeBlockNumber := new(big.Int)
-		if parent.Number.Cmp(bombDelayFromParent) >= 0 {
-			fakeBlockNumber = fakeBlockNumber.Sub(parent.Number, bombDelayFromParent)
-		}
-		// for the exponential factor
-		periodCount := fakeBlockNumber
-		periodCount.Div(periodCount, expDiffPeriod)
+			// minimum difficulty can ever be (before exponential factor)
+			if x.Cmp(params.MinimumDifficulty) < 0 {
+				x.Set(params.MinimumDifficulty)
+			}
+			// calculate a fake block number for the ice-age delay
+			// Specification: https://eips.ethereum.org/EIPS/eip-1234
+			fakeBlockNumber := new(big.Int)
+			if parent.Number.Cmp(bombDelayFromParent) >= 0 {
+				fakeBlockNumber = fakeBlockNumber.Sub(parent.Number, bombDelayFromParent)
+			}
+			// for the exponential factor
+			periodCount := fakeBlockNumber
+			periodCount.Div(periodCount, expDiffPeriod)
 
-		// the exponential factor, commonly referred to as "the bomb"
-		// diff = diff + 2^(periodCount - 2)
-		if periodCount.Cmp(big1) > 0 {
-			y.Sub(periodCount, big2)
-			y.Exp(big2, y, nil)
-			x.Add(x, y)
+			// the exponential factor, commonly referred to as "the bomb"
+			// diff = diff + 2^(periodCount - 2)
+			if periodCount.Cmp(big1) > 0 {
+				y.Sub(periodCount, big2)
+				y.Exp(big2, y, nil)
+				x.Add(x, y)
+			}
+			return x
 		}
-		return x
-	}
+	*/
+	return MakeLDPCDifficultyCalculator()
 }
 
 // calcDifficultyHomestead is the difficulty adjustment algorithm. It returns
@@ -395,76 +398,84 @@ func calcDifficultyHomestead(time uint64, parent *types.Header) *big.Int {
 	//         (parent_diff / 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
 	//        ) + 2^(periodCount - 2)
 
-	bigTime := new(big.Int).SetUint64(time)
-	bigParentTime := new(big.Int).Set(parent.Time)
+	/*
+		bigTime := new(big.Int).SetUint64(time)
+		bigParentTime := new(big.Int).Set(parent.Time)
 
-	// holds intermediate values to make the algo easier to read & audit
-	x := new(big.Int)
-	y := new(big.Int)
+		// holds intermediate values to make the algo easier to read & audit
+		x := new(big.Int)
+		y := new(big.Int)
 
-	// 1 - (block_timestamp - parent_timestamp) // 10
-	x.Sub(bigTime, bigParentTime)
-	x.Div(x, big10)
-	x.Sub(big1, x)
+		// 1 - (block_timestamp - parent_timestamp) // 10
+		x.Sub(bigTime, bigParentTime)
+		x.Div(x, big10)
+		x.Sub(big1, x)
 
-	// max(1 - (block_timestamp - parent_timestamp) // 10, -99)
-	if x.Cmp(bigMinus99) < 0 {
-		x.Set(bigMinus99)
-	}
-	// (parent_diff + parent_diff // 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
-	y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	x.Mul(y, x)
-	x.Add(parent.Difficulty, x)
+		// max(1 - (block_timestamp - parent_timestamp) // 10, -99)
+		if x.Cmp(bigMinus99) < 0 {
+			x.Set(bigMinus99)
+		}
+		// (parent_diff + parent_diff // 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
+		y.Div(parent.Difficulty, params.DifficultyBoundDivisor)
+		x.Mul(y, x)
+		x.Add(parent.Difficulty, x)
 
-	// minimum difficulty can ever be (before exponential factor)
-	if x.Cmp(params.MinimumDifficulty) < 0 {
-		x.Set(params.MinimumDifficulty)
-	}
-	// for the exponential factor
-	periodCount := new(big.Int).Add(parent.Number, big1)
-	periodCount.Div(periodCount, expDiffPeriod)
+		// minimum difficulty can ever be (before exponential factor)
+		if x.Cmp(params.MinimumDifficulty) < 0 {
+			x.Set(params.MinimumDifficulty)
+		}
+		// for the exponential factor
+		periodCount := new(big.Int).Add(parent.Number, big1)
+		periodCount.Div(periodCount, expDiffPeriod)
 
-	// the exponential factor, commonly referred to as "the bomb"
-	// diff = diff + 2^(periodCount - 2)
-	if periodCount.Cmp(big1) > 0 {
-		y.Sub(periodCount, big2)
-		y.Exp(big2, y, nil)
-		x.Add(x, y)
-	}
-	return x
+		// the exponential factor, commonly referred to as "the bomb"
+		// diff = diff + 2^(periodCount - 2)
+		if periodCount.Cmp(big1) > 0 {
+			y.Sub(periodCount, big2)
+			y.Exp(big2, y, nil)
+			x.Add(x, y)
+		}
+		return x
+	*/
+	difficultyCalculator := MakeLDPCDifficultyCalculator()
+	return difficultyCalculator(time, parent)
 }
 
 // calcDifficultyFrontier is the difficulty adjustment algorithm. It returns the
 // difficulty that a new block should have when created at time given the parent
 // block's time and difficulty. The calculation uses the Frontier rules.
 func calcDifficultyFrontier(time uint64, parent *types.Header) *big.Int {
-	diff := new(big.Int)
-	adjust := new(big.Int).Div(parent.Difficulty, params.DifficultyBoundDivisor)
-	bigTime := new(big.Int)
-	bigParentTime := new(big.Int)
+	/*
+		diff := new(big.Int)
+		adjust := new(big.Int).Div(parent.Difficulty, params.DifficultyBoundDivisor)
+		bigTime := new(big.Int)
+		bigParentTime := new(big.Int)
 
-	bigTime.SetUint64(time)
-	bigParentTime.Set(parent.Time)
+		bigTime.SetUint64(time)
+		bigParentTime.Set(parent.Time)
 
-	if bigTime.Sub(bigTime, bigParentTime).Cmp(params.DurationLimit) < 0 {
-		diff.Add(parent.Difficulty, adjust)
-	} else {
-		diff.Sub(parent.Difficulty, adjust)
-	}
-	if diff.Cmp(params.MinimumDifficulty) < 0 {
-		diff.Set(params.MinimumDifficulty)
-	}
+		if bigTime.Sub(bigTime, bigParentTime).Cmp(params.DurationLimit) < 0 {
+			diff.Add(parent.Difficulty, adjust)
+		} else {
+			diff.Sub(parent.Difficulty, adjust)
+		}
+		if diff.Cmp(params.MinimumDifficulty) < 0 {
+			diff.Set(params.MinimumDifficulty)
+		}
 
-	periodCount := new(big.Int).Add(parent.Number, big1)
-	periodCount.Div(periodCount, expDiffPeriod)
-	if periodCount.Cmp(big1) > 0 {
-		// diff = diff + 2^(periodCount - 2)
-		expDiff := periodCount.Sub(periodCount, big2)
-		expDiff.Exp(big2, expDiff, nil)
-		diff.Add(diff, expDiff)
-		diff = math.BigMax(diff, params.MinimumDifficulty)
-	}
-	return diff
+		periodCount := new(big.Int).Add(parent.Number, big1)
+		periodCount.Div(periodCount, expDiffPeriod)
+		if periodCount.Cmp(big1) > 0 {
+			// diff = diff + 2^(periodCount - 2)
+			expDiff := periodCount.Sub(periodCount, big2)
+			expDiff.Exp(big2, expDiff, nil)
+			diff.Add(diff, expDiff)
+			diff = math.BigMax(diff, params.MinimumDifficulty)
+		}
+		return diff
+	*/
+	difficultyCalculator := MakeLDPCDifficultyCalculator()
+	return difficultyCalculator(time, parent)
 }
 
 // VerifySeal implements consensus.Engine, checking whether the given block satisfies
@@ -492,7 +503,7 @@ func (ecc *ECC) verifySeal(chain consensus.ChainReader, header *types.Header, fu
 
 	//digest, result = hashimotoFull(dataset.dataset, ecc.SealHash(header).Bytes(), header.Nonce.Uint64())
 
-	RunLDPC(header.ParentHash.Bytes(), ecc.SealHash(header).Bytes())
+	RunOptimizedConcurrencyLDPC(header)
 
 	//target := new(big.Int).Div(two256, header.Difficulty)
 	//if new(big.Int).SetBytes(result).Cmp(target) > 0 {

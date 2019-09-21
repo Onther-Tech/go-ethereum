@@ -3,14 +3,12 @@ package eccpow
 import (
 	"crypto/sha256"
 	"fmt"
-	"math"
 	"math/big"
 	"math/rand"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/Onther-Tech/go-ethereum/crypto"
 
 	"github.com/Onther-Tech/go-ethereum/common"
 	"github.com/Onther-Tech/go-ethereum/consensus"
@@ -75,26 +73,7 @@ type sealWork struct {
 // reused between hash runs instead of requiring new ones to be created.
 //var hasher func(dest []byte, data []byte)
 
-const (
-	BigInfinity = 1000000.0
-	Inf         = 64.0
-	MaxNonce    = 1<<32 - 1
-
-	// These parameters are only used for the decoding function.
-	maxIter  = 20   // The maximum number of iteration in the decoder
-	crossErr = 0.01 // A transisient error probability. This is also fixed as a small value
-)
-
 var two256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
-
-//Parameters for matrix and seed
-type Parameters struct {
-	n    int
-	m    int
-	wc   int
-	wr   int
-	seed int
-}
 
 //const cross_err = 0.01
 
@@ -103,227 +82,105 @@ type Parameters struct {
 //	floatMatrix [][]float64
 //)
 
-//SetDifficultyUsingLevel set matrix parameters
-//Only 4 parameters are valied 0 : Very easy, 1 : Easy, 2 : Medium, 3 : hard
-func SetDifficultyUsingLevel(level int) Parameters {
-	//level 4 is max level
-	if level > 4 {
-		level = 4
-	}
+//RunOptimizedConcurrencyLDPC use goroutine for mining block
+func RunOptimizedConcurrencyLDPC(header *types.Header) ([]int, []int, uint64) {
+	//Need to set difficulty before running LDPC
+	// Number of goroutines : 500, Number of attempts : 50000 Not bad
 
-	parameters := Parameters{}
-	if level == 0 {
-		parameters.n = 16
-		parameters.wc = 3
-		parameters.wr = 4
-	} else if level == 1 {
-		parameters.n = 32
-		parameters.wc = 3
-		parameters.wr = 4
-	} else if level == 2 {
-		parameters.n = 64
-		parameters.wc = 3
-		parameters.wr = 4
-	} else if level == 3 {
-		parameters.n = 128
-		parameters.wc = 3
-		parameters.wr = 4
-	}
-	parameters.m = int(parameters.n * parameters.wc / parameters.wr)
+	var LDPCNonce uint64
+	var hashVector []int
+	var outputWord []int
 
-	return parameters
-}
+	var wg sync.WaitGroup
+	var outerLoopSignal = make(chan struct{})
+	var innerLoopSignal = make(chan struct{})
+	var goRoutineSignal = make(chan struct{})
+	parameters, _ := setParameters(header)
 
-//GenerateSeed generate seed using previous hash vector
-func GenerateSeed(phv []byte) int {
-	sum := 0
-	for i := 0; i < len(phv); i++ {
-		sum += int(phv[i])
-	}
-	return sum
-}
+outerLoop:
+	for {
+		select {
+		// If outerLoopSignal channel is closed, then break outerLoop
+		case <-outerLoopSignal:
+			break outerLoop
 
-//Decoding carry out LDPC decoding. It returns hashVector and outputWord
-func Decoding(parameters Parameters,
-	hashVector []int,
-	H, rowInCol, colInRow [][]int,
-) ([]int, []int, [][]float64) {
-	var temp3, tempSign, sign, magnitude float64
-
-	outputWord := make([]int, parameters.n)
-	LRqtl := make([][]float64, parameters.n)
-	LRrtl := make([][]float64, parameters.n)
-	LRft := make([]float64, parameters.n)
-
-	for i := 0; i < parameters.n; i++ {
-		LRqtl[i] = make([]float64, parameters.m)
-		LRrtl[i] = make([]float64, parameters.m)
-		LRft[i] = math.Log((1-crossErr)/crossErr) * float64((hashVector[i]*2 - 1))
-	}
-	LRpt := make([]float64, parameters.n)
-
-	var i, k, l, m, ind, t, mp int
-	for ind = 1; ind <= maxIter; ind++ {
-		for t = 0; t < parameters.n; t++ {
-			for m = 0; m < parameters.wc; m++ {
-				temp3 = 0
-				for mp = 0; mp < parameters.wc; mp++ {
-					if mp != m {
-						temp3 = infinityTest(temp3 + LRrtl[t][rowInCol[mp][t]])
-					}
-				}
-				LRqtl[t][rowInCol[m][t]] = infinityTest(LRft[t] + temp3)
-			}
+		default:
+			// Defined default to unblock select statement
 		}
-		for k = 0; k < m; k++ {
-			for l = 0; l < parameters.wr; l++ {
-				temp3 = 0.0
-				sign = 1
-				for m = 0; m < parameters.wr; m++ {
-					if m != l {
-						temp3 = temp3 + funcF(math.Abs(LRqtl[colInRow[m][k]][k]))
-						if LRqtl[colInRow[m][k]][k] > 0.0 {
-							tempSign = 1.0
-						} else {
-							tempSign = -1.0
+
+	innerLoop:
+		for i := 0; i < runtime.NumCPU(); i++ {
+			select {
+			// If innerLoop signal is closed, then break innerLoop and close outerLoopSignal
+			case <-innerLoopSignal:
+				close(outerLoopSignal)
+				break innerLoop
+
+			default:
+				// Defined default to unblock select statement
+			}
+
+			wg.Add(1)
+			go func(goRoutineSignal chan struct{}) {
+				defer wg.Done()
+				//goRoutineNonce := generateRandomNonce()
+				//fmt.Printf("Initial goroutine Nonce : %v\n", goRoutineNonce)
+
+				var goRoutineHashVector []int
+				var goRoutineOutputWord []int
+
+				var serializedHeader = string(header.ParentHash[:])
+				var serializedHeaderWithNonce string
+
+				var encryptedHeaderWithNonce [32]byte
+				H := generateH(parameters)
+				colInRow, rowInCol := generateQ(parameters, H)
+
+				select {
+				case <-goRoutineSignal:
+					break
+
+				default:
+				attemptLoop:
+					for attempt := 0; attempt < 5000; attempt++ {
+						goRoutineNonce := generateRandomNonce()
+						serializedHeaderWithNonce = serializedHeader + strconv.FormatUint(goRoutineNonce, 10)
+						encryptedHeaderWithNonce = sha256.Sum256([]byte(serializedHeaderWithNonce))
+
+						goRoutineHashVector = generateHv(parameters, encryptedHeaderWithNonce)
+						goRoutineHashVector, goRoutineOutputWord, _ = OptimizedDecoding(header, goRoutineHashVector, H, rowInCol, colInRow)
+						flag := MakeDecision(header, colInRow, goRoutineOutputWord)
+
+						select {
+						case <-goRoutineSignal:
+							// fmt.Println("goRoutineSignal channel is already closed")
+							break attemptLoop
+						default:
+							if flag {
+								close(goRoutineSignal)
+								close(innerLoopSignal)
+								fmt.Printf("Codeword is founded with nonce = %d\n", goRoutineNonce)
+								LDPCNonce = goRoutineNonce
+								hashVector = goRoutineHashVector
+								outputWord = goRoutineOutputWord
+								break attemptLoop
+							}
 						}
-						sign = sign * tempSign
+						//goRoutineNonce++
 					}
-
 				}
-				magnitude = funcF(temp3)
-				LRrtl[colInRow[l][k]][k] = infinityTest(sign * magnitude)
-			}
+			}(goRoutineSignal)
 		}
-		for m = 0; m < parameters.n; m++ {
-			LRpt[m] = infinityTest(LRft[m])
-			for k = 0; k < parameters.wc; k++ {
-				LRpt[m] += LRrtl[m][rowInCol[k][m]]
-				LRpt[m] = infinityTest(LRpt[m])
-			}
-		}
-	}
-	for i = 0; i < parameters.n; i++ {
-		if LRpt[i] >= 0 {
-			outputWord[i] = 1
-		} else {
-			outputWord[i] = 0
-		}
+		// Need to wait to prevent memory leak
+		wg.Wait()
 	}
 
-	return hashVector, outputWord, LRrtl
-}
-
-//GenerateH generate H matrix using parameters
-//GenerateH Cannot be sure rand is same with original implementation of C++
-func GenerateH(parameters Parameters) [][]int {
-	var H [][]int
-	var hSeed int64
-	hSeed = int64(parameters.seed)
-
-	var colOrder []int
-	/*
-		if H == nil {
-			return false
-		}
-	*/
-	k := parameters.m / parameters.wc
-	H = make([][]int, parameters.m)
-	for i := range H {
-		H[i] = make([]int, parameters.n)
-	}
-
-	for i := 0; i < k; i++ {
-		for j := i * parameters.wr; j < (i+1)*parameters.wr; j++ {
-			H[i][j] = 1
-		}
-	}
-
-	for i := 1; i < parameters.wc; i++ {
-		colOrder = nil
-		for j := 0; j < parameters.n; j++ {
-			colOrder = append(colOrder, j)
-		}
-
-		rand.Seed(hSeed)
-		rand.Shuffle(len(colOrder), func(i, j int) {
-			colOrder[i], colOrder[j] = colOrder[j], colOrder[i]
-		})
-		hSeed--
-
-		for j := 0; j < parameters.n; j++ {
-			index := (colOrder[j]/parameters.wr + k*i)
-			H[index][j] = 1
-		}
-	}
-
-	return H
-}
-
-//GenerateQ generate colInRow and rowInCol matrix using H matrix
-func GenerateQ(parameters Parameters, H [][]int) ([][]int, [][]int) {
-	colInRow := make([][]int, parameters.wr)
-	for i := 0; i < parameters.wr; i++ {
-		colInRow[i] = make([]int, parameters.m)
-	}
-
-	rowInCol := make([][]int, parameters.wc)
-	for i := 0; i < parameters.wc; i++ {
-		rowInCol[i] = make([]int, parameters.n)
-	}
-
-	rowIndex := 0
-	colIndex := 0
-
-	for i := 0; i < parameters.m; i++ {
-		for j := 0; j < parameters.n; j++ {
-			if H[i][j] == 1 {
-				colInRow[colIndex%parameters.wr][i] = j
-				colIndex++
-
-				rowInCol[rowIndex/parameters.n][j] = i
-				rowIndex++
-			}
-		}
-	}
-
-	return colInRow, rowInCol
-}
-
-//GenerateHv generate hashvector
-//It needs to compare with origin C++ implementation Especially when sha256 function is used
-func GenerateHv(parameters Parameters, headerWithNonce []byte) []int {
-	//inputSize := len(headerWithNonce)
-	var tmpHashVector [32]byte //32bytes => 256 bits
-	hashVector := make([]int, parameters.n)
-
-	if parameters.n <= 256 {
-		tmpHashVector = sha256.Sum256(headerWithNonce)
-	} else {
-		/*
-			This section is for a case in which the size of a hash vector is larger than 256.
-			This section will be implemented soon.
-		*/
-	}
-
-	/*
-		transform the constructed hexadecimal array into an binary array
-		ex) FE01 => 11111110000 0001
-	*/
-	for i := 0; i < parameters.n/8; i++ {
-		decimal := int(tmpHashVector[i])
-		for j := 7; j >= 0; j-- {
-			hashVector[j+8*(i)] = decimal % 2
-			decimal /= 2
-		}
-	}
-
-	//outputWord := hashVector[:parameters.n]
-	return hashVector
+	return hashVector, outputWord, LDPCNonce
 }
 
 //MakeDecision check outputWord is valid or not using colInRow
-func MakeDecision(parameters Parameters, colInRow [][]int, outputWord []int) bool {
+func MakeDecision(header *types.Header, colInRow [][]int, outputWord []int) bool {
+	parameters, difficultyLevel := setParameters(header)
 	for i := 0; i < parameters.m; i++ {
 		sum := 0
 		for j := 0; j < parameters.wr; j++ {
@@ -334,91 +191,19 @@ func MakeDecision(parameters Parameters, colInRow [][]int, outputWord []int) boo
 			return false
 		}
 	}
-	return true
-}
 
-func RunLDPC(prevHash []byte, curHash []byte) (int, []byte, [][]float64) {
-	var LDPCNonce uint32
-	var hashVector []int
-	var outputWord []int
-	var LRrtl [][]float64
-
-	var currentBlockHeader string
-	var currentBlockHeaderWithNonce string
-
-	parameters := SetDifficultyUsingLevel(0)
-	parameters.seed = GenerateSeed(prevHash)
-
-	H := GenerateH(parameters)
-	colInRow, rowInCol := GenerateQ(parameters, H)
-	//PrintQ(printRowInCol)
-	//PrintQ(printColInRow)
-
-	for {
-		//If Nonce is bigger than MaxNonce, then update timestamp
-		if LDPCNonce >= MaxNonce {
-			LDPCNonce = 0
-			currentBlockHeader = string(curHash)
-		}
-		currentBlockHeaderWithNonce = currentBlockHeader + strconv.FormatUint(uint64(LDPCNonce), 10)
-
-		hashVector = GenerateHv(parameters, []byte(currentBlockHeaderWithNonce))
-		hashVector, outputWord, LRrtl = Decoding(parameters, hashVector, H, rowInCol, colInRow)
-		flag := MakeDecision(parameters, colInRow, outputWord)
-
-		if !flag {
-			hashVector, outputWord, LRrtl = Decoding(parameters, hashVector, H, rowInCol, colInRow)
-			flag = MakeDecision(parameters, colInRow, outputWord)
-		}
-		if flag {
-			fmt.Printf("Codeword is founded with nonce = %d\n", LDPCNonce)
-			break
-		}
-		LDPCNonce++
+	var numOfOnes int
+	for _, val := range outputWord {
+		numOfOnes += val
 	}
-	return int(LDPCNonce), crypto.Keccak256([]byte(currentBlockHeaderWithNonce)), LRrtl
-}
 
-//func isRegular(nSize, wCol, wRow int) bool {
-//	res := float64(nSize*wCol) / float64(wRow)
-//	m := math.Round(res)
-//
-//	if int(m)*wRow == nSize*wCol {
-//		return true
-//	}
-//
-//	return false
-//}
-
-//func SetDifficulty(nSize, wCol, wRow int) bool {
-//	if isRegular(nSize, wCol, wRow) {
-//		n = nSize
-//		wc = wCol
-//		wr = wRow
-//		m = int(n * wc / wr)
-//		return true
-//	}
-//	return false
-//}
-
-func funcF(x float64) float64 {
-	if x >= BigInfinity {
-		return 1.0 / BigInfinity
-	} else if x <= (1.0 / BigInfinity) {
-		return BigInfinity
-	} else {
-		return math.Log((math.Exp(x) + 1) / (math.Exp(x) - 1))
+	if numOfOnes >= Table[difficultyLevel].decisionFrom &&
+		numOfOnes <= Table[difficultyLevel].decisionTo &&
+		numOfOnes%Table[difficultyLevel].decisionStep == 0 {
+		return true
 	}
-}
 
-func infinityTest(x float64) float64 {
-	if x >= Inf {
-		return Inf
-	} else if x <= -Inf {
-		return -Inf
-	} else {
-		return x
-	}
+	return false
 }
 
 //func newIntMatrix(rows, cols int) intMatrix {
