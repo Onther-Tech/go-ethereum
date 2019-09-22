@@ -154,7 +154,7 @@ func generateQ(parameters Parameters, H [][]int) ([][]int, [][]int) {
 
 //generateHv generate hashvector
 //It needs to compare with origin C++ implementation Especially when sha256 function is used
-func generateHv(parameters Parameters, encryptedHeaderWithNonce [32]byte) []int {
+func generateHv(parameters Parameters, encryptedHeaderWithNonce []byte) []int {
 	hashVector := make([]int, parameters.n)
 
 	/*

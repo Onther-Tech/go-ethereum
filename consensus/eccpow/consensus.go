@@ -70,7 +70,7 @@ var (
 	errDanglingUncle     = errors.New("uncle's parent is not ancestor")
 	errInvalidDifficulty = errors.New("non-positive difficulty")
 
-	//errInvalidPoW = errors.New("invalid proof-of-work")
+	errInvalidPoW = errors.New("invalid proof-of-work")
 )
 
 // Author implements consensus.Engine, returning the header's coinbase as the
@@ -503,7 +503,11 @@ func (ecc *ECC) verifySeal(chain consensus.ChainReader, header *types.Header, fu
 
 	//digest, result = hashimotoFull(dataset.dataset, ecc.SealHash(header).Bytes(), header.Nonce.Uint64())
 
-	RunOptimizedConcurrencyLDPC(header)
+	var hash = ecc.SealHash(header).Bytes()
+	flag, _, _ := VerifyOptimizedDecoding(header, hash)
+	if flag == false {
+		return errInvalidPoW
+	}
 
 	//target := new(big.Int).Div(two256, header.Difficulty)
 	//if new(big.Int).SetBytes(result).Cmp(target) > 0 {

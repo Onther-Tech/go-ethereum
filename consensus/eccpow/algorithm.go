@@ -1,18 +1,18 @@
 package eccpow
 
 import (
-	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"math/rand"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/Onther-Tech/go-ethereum/common"
 	"github.com/Onther-Tech/go-ethereum/consensus"
 	"github.com/Onther-Tech/go-ethereum/core/types"
+	"github.com/Onther-Tech/go-ethereum/crypto"
 	"github.com/Onther-Tech/go-ethereum/metrics"
 	"github.com/Onther-Tech/go-ethereum/rpc"
 )
@@ -83,7 +83,7 @@ var two256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 //)
 
 //RunOptimizedConcurrencyLDPC use goroutine for mining block
-func RunOptimizedConcurrencyLDPC(header *types.Header) ([]int, []int, uint64) {
+func RunOptimizedConcurrencyLDPC(header *types.Header, hash []byte) ([]int, []int, uint64) {
 	//Need to set difficulty before running LDPC
 	// Number of goroutines : 500, Number of attempts : 50000 Not bad
 
@@ -95,7 +95,6 @@ func RunOptimizedConcurrencyLDPC(header *types.Header) ([]int, []int, uint64) {
 	var outerLoopSignal = make(chan struct{})
 	var innerLoopSignal = make(chan struct{})
 	var goRoutineSignal = make(chan struct{})
-	parameters, _ := setParameters(header)
 
 outerLoop:
 	for {
@@ -129,10 +128,7 @@ outerLoop:
 				var goRoutineHashVector []int
 				var goRoutineOutputWord []int
 
-				var serializedHeader = string(header.ParentHash[:])
-				var serializedHeaderWithNonce string
-
-				var encryptedHeaderWithNonce [32]byte
+				parameters, _ := setParameters(header)
 				H := generateH(parameters)
 				colInRow, rowInCol := generateQ(parameters, H)
 
@@ -144,11 +140,13 @@ outerLoop:
 				attemptLoop:
 					for attempt := 0; attempt < 5000; attempt++ {
 						goRoutineNonce := generateRandomNonce()
-						serializedHeaderWithNonce = serializedHeader + strconv.FormatUint(goRoutineNonce, 10)
-						encryptedHeaderWithNonce = sha256.Sum256([]byte(serializedHeaderWithNonce))
+						seed := make([]byte, 40)
+						copy(seed, hash)
+						binary.LittleEndian.PutUint64(seed[32:], goRoutineNonce)
+						seed = crypto.Keccak512(seed)
 
-						goRoutineHashVector = generateHv(parameters, encryptedHeaderWithNonce)
-						goRoutineHashVector, goRoutineOutputWord, _ = OptimizedDecoding(header, goRoutineHashVector, H, rowInCol, colInRow)
+						goRoutineHashVector = generateHv(parameters, seed)
+						goRoutineHashVector, goRoutineOutputWord, _ = OptimizedDecoding(parameters, goRoutineHashVector, H, rowInCol, colInRow)
 						flag := MakeDecision(header, colInRow, goRoutineOutputWord)
 
 						select {

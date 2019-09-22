@@ -43,7 +43,8 @@ func TestLDPC(t *testing.T) {
 	header := new(types.Header)
 	//t.Log(hexutil.Encode(header.ParentHash))
 	header.Difficulty = ProbToDifficulty(Table[0].miningProb)
-	hashVector, outputWord, LDPCNonce := RunOptimizedConcurrencyLDPC(header)
+	var hash []byte
+	hashVector, outputWord, LDPCNonce := RunOptimizedConcurrencyLDPC(header, hash)
 
 	t.Logf("Hash vector : %v\n", hashVector)
 	t.Logf("Outputword : %v\n", outputWord)
@@ -60,9 +61,10 @@ func BenchmarkECCPoW(b *testing.B) {
 
 	header := new(types.Header)
 	header.Difficulty = ProbToDifficulty(Table[0].miningProb)
+	var hash []byte
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		RunOptimizedConcurrencyLDPC(header)
+		RunOptimizedConcurrencyLDPC(header, hash)
 	}
 
 }

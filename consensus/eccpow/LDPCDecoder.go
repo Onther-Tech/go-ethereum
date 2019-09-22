@@ -1,15 +1,16 @@
 package eccpow
 
 import (
+	"encoding/binary"
 	"math"
 
 	"github.com/Onther-Tech/go-ethereum/core/types"
+	"github.com/Onther-Tech/go-ethereum/crypto"
 )
 
 //OptimizedDecoding is 20% faster than previous decoding function when they use same nonce
 //percentage can be changed because of random nonce
-func OptimizedDecoding(header *types.Header, hashVector []int, H, rowInCol, colInRow [][]int) ([]int, []int, [][]float64) {
-	parameters, _ := setParameters(header)
+func OptimizedDecoding(parameters Parameters, hashVector []int, H, rowInCol, colInRow [][]int) ([]int, []int, [][]float64) {
 	outputWord := make([]int, parameters.n)
 	LRqtl := make([][]float64, parameters.n)
 	LRrtl := make([][]float64, parameters.n)
@@ -73,4 +74,25 @@ func OptimizedDecoding(header *types.Header, hashVector []int, H, rowInCol, colI
 	}
 
 	return hashVector, outputWord, LRrtl
+}
+
+//VerifyOptimizedDecoding return bool, hashVector of verification, outputWord of verification
+func VerifyOptimizedDecoding(header *types.Header, hash []byte) (bool, []int, []int) {
+	parameters, _ := setParameters(header)
+	H := generateH(parameters)
+	colInRow, rowInCol := generateQ(parameters, H)
+
+	seed := make([]byte, 40)
+	copy(seed, hash)
+	binary.LittleEndian.PutUint64(seed[32:], header.Nonce.Uint64())
+	seed = crypto.Keccak512(seed)
+
+	hashVector := generateHv(parameters, seed)
+	hashVectorOfVerification, outputWordOfVerification, _ := OptimizedDecoding(parameters, hashVector, H, rowInCol, colInRow)
+
+	if MakeDecision(header, colInRow, outputWordOfVerification) {
+		return true, hashVectorOfVerification, outputWordOfVerification
+	}
+
+	return false, hashVectorOfVerification, outputWordOfVerification
 }

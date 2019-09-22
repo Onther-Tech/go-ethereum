@@ -34,6 +34,7 @@ func TestConversionFunc(t *testing.T) {
 }
 
 func TestDifficultyChange(t *testing.T) {
+	var hash []byte
 	currentLevel := 0
 	currentBlock := new(types.Header)
 	// Parent block's timestamp is 0
@@ -45,7 +46,7 @@ func TestDifficultyChange(t *testing.T) {
 
 		startTime := time.Now()
 
-		RunOptimizedConcurrencyLDPC(currentBlock)
+		RunOptimizedConcurrencyLDPC(currentBlock, hash)
 		timeStamp := uint64(time.Since(startTime).Seconds())
 		fmt.Printf("Block generation time : %v\n", timeStamp)
 
