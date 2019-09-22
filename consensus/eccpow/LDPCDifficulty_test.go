@@ -54,7 +54,6 @@ func TestDifficultyChange(t *testing.T) {
 		difficultyCalculator := MakeLDPCDifficultyCalculator()
 		nextDifficulty := difficultyCalculator(timeStamp, currentBlock)
 		currentBlock.Difficulty = nextDifficulty
-		currentBlock.Time = big.NewInt(int64(timeStamp))
 		nextLevel := SearchLevel(nextDifficulty)
 
 		fmt.Printf("Current prob : %v, Next Level : %v,  Next difficulty : %v, Next difficulty from table : %v\n\n", Table[currentLevel].miningProb, Table[nextLevel].level, nextDifficulty, ProbToDifficulty(Table[nextLevel].miningProb))
