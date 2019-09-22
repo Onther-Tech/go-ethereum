@@ -3,6 +3,7 @@ package eccpow
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"testing"
 	"time"
 
@@ -39,9 +40,9 @@ func TestDifficultyChange(t *testing.T) {
 	currentBlock := new(types.Header)
 	// Parent block's timestamp is 0
 	// compare elapse time(timestamp) and parent block's timestamp(0)
-	currentBlock.Difficulty = ProbToDifficulty(Table[currentLevel].miningProb)
-
-	for i := 0; i < 2; i++ {
+	currentBlock.Difficulty = big.NewInt(0)
+	currentBlock.Time = big.NewInt(0)
+	for i := 0; i < 5; i++ {
 		fmt.Printf("Current Difficulty : %v\n", currentBlock.Difficulty)
 
 		startTime := time.Now()
@@ -53,6 +54,7 @@ func TestDifficultyChange(t *testing.T) {
 		difficultyCalculator := MakeLDPCDifficultyCalculator()
 		nextDifficulty := difficultyCalculator(timeStamp, currentBlock)
 		currentBlock.Difficulty = nextDifficulty
+		currentBlock.Time = big.NewInt(int64(timeStamp))
 		nextLevel := SearchLevel(nextDifficulty)
 
 		fmt.Printf("Current prob : %v, Next Level : %v,  Next difficulty : %v, Next difficulty from table : %v\n\n", Table[currentLevel].miningProb, Table[nextLevel].level, nextDifficulty, ProbToDifficulty(Table[nextLevel].miningProb))
