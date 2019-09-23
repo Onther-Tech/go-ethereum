@@ -165,19 +165,19 @@ search:
 		}
 		// Compute the PoW value of this nonce
 
-		nonce, digest := RunLDPC(header.ParentHash.Bytes(), hash)
+		_, _, LDPCNonce, digest := RunOptimizedConcurrencyLDPC(header, hash)
 
 		// Correct nonce found, create a new header with it
 		header = types.CopyHeader(header)
 		header.MixDigest = common.BytesToHash(digest)
-		header.Nonce = types.EncodeNonce(uint64(nonce))
+		header.Nonce = types.EncodeNonce(LDPCNonce)
 
 		// Seal and return a block (if still needed)
 		select {
 		case found <- block.WithSeal(header):
-			logger.Trace("ecc nonce found and reported", "nonce", nonce)
+			logger.Trace("ecc nonce found and reported", "LDPCNonce", LDPCNonce)
 		case <-abort:
-			logger.Trace("ecc nonce found but discarded", "nonce", nonce)
+			logger.Trace("ecc nonce found but discarded", "LDPCNonce", LDPCNonce)
 		}
 		break search
 	}
