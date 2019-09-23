@@ -148,10 +148,14 @@ func SetDifficultyUsingLevel(level int) Parameters {
 		parameters.wc = 3
 		parameters.wr = 4
 	} else if level == 1 {
-		parameters.n = 24
+		parameters.n = 20
 		parameters.wc = 3
 		parameters.wr = 4
 	} else if level == 2 {
+		parameters.n = 24
+		parameters.wc = 3
+		parameters.wr = 4
+	} else if level == 3 {
 		parameters.n = 32
 		parameters.wc = 3
 		parameters.wr = 4
@@ -378,7 +382,7 @@ func RunLDPC(prevHash []byte, curHash []byte) (int, []byte) {
 	var serializedHeaderWithNonce string
 	var encryptedHeaderWithNonce []byte
 
-	parameters := SetDifficultyUsingLevel(1)
+	parameters := SetDifficultyUsingLevel(0)
 	parameters.seed = uint64(GenerateSeed(prevHash))
 
 	H := GenerateH(parameters)
