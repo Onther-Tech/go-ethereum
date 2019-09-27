@@ -2,6 +2,7 @@ package eccpow
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/Onther-Tech/go-ethereum/core/types"
@@ -87,12 +88,30 @@ func VerifyOptimizedDecoding(header *types.Header, hash []byte) (bool, []int, []
 	binary.LittleEndian.PutUint64(seed[32:], header.Nonce.Uint64())
 	seed = crypto.Keccak512(seed)
 
+	fmt.Printf("Col in row before decoding :  %v\n", colInRow)
 	hashVector := generateHv(parameters, seed)
 	hashVectorOfVerification, outputWordOfVerification, _ := OptimizedDecoding(parameters, hashVector, H, rowInCol, colInRow)
+
+	fmt.Printf("Col in row before decoding :  %v\n", colInRow)
+	for i := 0; i < parameters.m; i++ {
+		sum := 0
+		for j := 0; j < parameters.wr; j++ {
+			sum = sum + outputWordOfVerification[colInRow[j][i]]
+			fmt.Printf("i : %v, j : %v colInRow[j][i] : %v, outputWordOfVerification[colInRow[j][i]] : %v\n", i, j, colInRow[j][i], outputWordOfVerification[colInRow[j][i]])
+		}
+		fmt.Printf("sum :%v\n", sum)
+		if sum%2 == 1 {
+			fmt.Printf("sum : %v\n", sum)
+			fmt.Printf("parameters : +%v\n", parameters)
+			fmt.Printf("outputWordOfVerification : %v\n", outputWordOfVerification)
+			fmt.Printf("False here\n")
+		}
+	}
 
 	if MakeDecision(header, colInRow, outputWordOfVerification) {
 		return true, hashVectorOfVerification, outputWordOfVerification, seed
 	}
 
+	fmt.Println("Decision fail")
 	return false, hashVectorOfVerification, outputWordOfVerification, seed
 }

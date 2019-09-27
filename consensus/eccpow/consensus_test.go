@@ -89,7 +89,7 @@ func TestCalcDifficulty(t *testing.T) {
 }
 
 func TestDecodingVerification(t *testing.T) {
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ {
 		ecc := ECC{}
 		header := new(types.Header)
 		header.Difficulty = ProbToDifficulty(Table[0].miningProb)
@@ -114,7 +114,7 @@ func TestDecodingVerification(t *testing.T) {
 		//fmt.Printf("headerForTest : %v\n", headerForTest)
 		//fmt.Println()
 
-		if flag == true && bytes.Equal(headerForTest.MixDigest[:], encodedDigestForValidation[:]) {
+		if flag && bytes.Equal(headerForTest.MixDigest[:], encodedDigestForValidation[:]) {
 			fmt.Printf("Hash vector : %v\n", hashVector)
 			fmt.Printf("Hash vector of verification : %v\n", hashVectorOfVerification)
 
@@ -132,7 +132,7 @@ func TestDecodingVerification(t *testing.T) {
 			*/
 		} else {
 			// p means padding for compare easily
-			fmt.Printf("Hash vector pp pppppppppppp: %v\n", hashVector)
+			fmt.Printf("Hash vector pp pppppppppppp : %v\n", hashVector)
 			fmt.Printf("Hash vector of verification : %v\n", hashVectorOfVerification)
 
 			fmt.Printf("Outputword pp pppppppppppp : %v\n", outputWord)

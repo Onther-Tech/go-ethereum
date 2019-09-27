@@ -199,6 +199,23 @@ outerLoop:
 								outputWord = goRoutineOutputWord
 								LDPCNonce = goRoutineNonce
 								digest = seed
+
+								for i := 0; i < parameters.m; i++ {
+									sum := 0
+									for j := 0; j < parameters.wr; j++ {
+										sum = sum + outputWord[colInRow[j][i]]
+										fmt.Printf("i : %v, j : %v colInRow[j][i] : %v, outputWord[colInRow[j][i]] : %v\n", i, j, colInRow[j][i], outputWord[colInRow[j][i]])
+									}
+									fmt.Printf("sum :%v\n", sum)
+									if sum%2 == 1 {
+										fmt.Printf("sum : %v\n", sum)
+										fmt.Printf("parameters : +%v\n", parameters)
+										fmt.Printf("outputWord : %v\n", outputWord)
+										fmt.Printf("False here\n")
+									}
+								}
+								fmt.Printf("colInRow : %v\n", colInRow)
+								fmt.Println("-------------------------------------------------------------------------------")
 								break attemptLoop
 							}
 						}
