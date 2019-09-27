@@ -525,12 +525,13 @@ func (ecc *ECC) verifySeal(chain consensus.ChainReader, header *types.Header, fu
 	//VerifyDecoding(Parameters{},vParameter.outputWord, header.Nonce.Uint64(), header.ParentHash.Bytes())
 
 	var hash = ecc.SealHash(header).Bytes()
-	flag, _, _ := VerifyOptimizedDecoding(header, hash)
+	flag, _, _, digest := VerifyOptimizedDecoding(header, hash)
 	if flag == false {
 		return errInvalidPoW
 	}
 
-	if !bytes.Equal(header.MixDigest[:], digest) {
+	encodedDigest := common.BytesToHash(digest)
+	if !bytes.Equal(header.MixDigest[:], encodedDigest[:]) {
 		return errInvalidMixDigest
 	}
 	if nonce < 0 {
