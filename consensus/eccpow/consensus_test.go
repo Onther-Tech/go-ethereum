@@ -89,7 +89,7 @@ func TestCalcDifficulty(t *testing.T) {
 }
 
 func TestDecodingVerification(t *testing.T) {
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 8; i++ {
 		ecc := ECC{}
 		header := new(types.Header)
 		header.Difficulty = ProbToDifficulty(Table[0].miningProb)
@@ -114,16 +114,16 @@ func TestDecodingVerification(t *testing.T) {
 		//fmt.Printf("headerForTest : %v\n", headerForTest)
 		//fmt.Println()
 
+		// * means padding for compare easily
 		if flag && bytes.Equal(headerForTest.MixDigest[:], encodedDigestForValidation[:]) {
-			fmt.Printf("Hash vector : %v\n", hashVector)
+			fmt.Printf("Hash vector ** ************ : %v\n", hashVector)
 			fmt.Printf("Hash vector of verification : %v\n", hashVectorOfVerification)
 
-			fmt.Printf("Outputword : %v\n", outputWord)
+			fmt.Printf("Outputword ** ************ : %v\n", outputWord)
 			fmt.Printf("Outputword of verification : %v\n", outputWordOfVerification)
 
 			fmt.Printf("LDPC Nonce : %v\n", LDPCNonce)
 			fmt.Printf("Digest : %v\n", headerForTest.MixDigest[:])
-			fmt.Println()
 			/*
 				t.Logf("Hash vector : %v\n", hashVector)
 				t.Logf("Outputword : %v\n", outputWord)
@@ -131,20 +131,18 @@ func TestDecodingVerification(t *testing.T) {
 				t.Logf("Digest : %v\n", header.MixDigest[:])
 			*/
 		} else {
-			// p means padding for compare easily
-			fmt.Printf("Hash vector pp pppppppppppp : %v\n", hashVector)
+			fmt.Printf("Hash vector ** ************ : %v\n", hashVector)
 			fmt.Printf("Hash vector of verification : %v\n", hashVectorOfVerification)
 
-			fmt.Printf("Outputword pp pppppppppppp : %v\n", outputWord)
+			fmt.Printf("Outputword ** ************ : %v\n", outputWord)
 			fmt.Printf("Outputword of verification : %v\n", outputWordOfVerification)
 
 			fmt.Printf("flag : %v\n", flag)
 			fmt.Printf("Digest compare result : %v\n", bytes.Equal(headerForTest.MixDigest[:], encodedDigestForValidation[:]))
-			fmt.Printf("Digest ppp pppppppppp : %v\n", headerForTest.MixDigest[:])
+			fmt.Printf("Digest *** ********** : %v\n", headerForTest.MixDigest[:])
 			fmt.Printf("Digest for validation : %v\n", encodedDigestForValidation)
 
 			t.Errorf("Test Fail")
-			fmt.Println()
 			/*
 				t.Errorf("flag : %v\n", flag)
 				t.Errorf("Digest compare result : %v", bytes.Equal(header.MixDigest[:], digestForValidation)
