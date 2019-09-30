@@ -132,6 +132,10 @@ func RunOptimizedConcurrencyLDPC(header *types.Header, hash []byte) ([]int, []in
 	var innerLoopSignal = make(chan struct{})
 	var goRoutineSignal = make(chan struct{})
 
+	parameters, _ := setParameters(header)
+	H := generateH(parameters)
+	colInRow, rowInCol := generateQ(parameters, H)
+
 outerLoop:
 	for {
 		select {
@@ -164,10 +168,6 @@ outerLoop:
 				var goRoutineHashVector []int
 				var goRoutineOutputWord []int
 
-				parameters, _ := setParameters(header)
-				H := generateH(parameters)
-				colInRow, rowInCol := generateQ(parameters, H)
-
 				select {
 				case <-goRoutineSignal:
 					break
@@ -194,7 +194,6 @@ outerLoop:
 								close(goRoutineSignal)
 								close(innerLoopSignal)
 								fmt.Printf("Codeword is founded with nonce = %d\n", goRoutineNonce)
-
 								hashVector = goRoutineHashVector
 								outputWord = goRoutineOutputWord
 								LDPCNonce = goRoutineNonce

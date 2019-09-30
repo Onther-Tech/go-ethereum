@@ -8,7 +8,7 @@ import (
 	"github.com/Onther-Tech/go-ethereum/crypto"
 )
 
-//OptimizedDecoding is 20% faster than previous decoding function when they use same nonce
+//OptimizedDecoding return hashVector, outputWord, LRrtl and It is 20% faster than previous decoding function when they use same nonce
 //percentage can be changed because of random nonce
 func OptimizedDecoding(parameters Parameters, hashVector []int, H, rowInCol, colInRow [][]int) ([]int, []int, [][]float64) {
 	outputWord := make([]int, parameters.n)
@@ -76,8 +76,8 @@ func OptimizedDecoding(parameters Parameters, hashVector []int, H, rowInCol, col
 	return hashVector, outputWord, LRrtl
 }
 
-//VerifyOptimizedDecoding return bool, hashVector of verification, outputWord of verification
-func VerifyOptimizedDecoding(header *types.Header, hash []byte) (bool, []int, []int) {
+//VerifyOptimizedDecoding return bool, hashVector, outputword, digest which are used for validation
+func VerifyOptimizedDecoding(header *types.Header, hash []byte) (bool, []int, []int, []byte) {
 	parameters, _ := setParameters(header)
 	H := generateH(parameters)
 	colInRow, rowInCol := generateQ(parameters, H)
@@ -91,8 +91,8 @@ func VerifyOptimizedDecoding(header *types.Header, hash []byte) (bool, []int, []
 	hashVectorOfVerification, outputWordOfVerification, _ := OptimizedDecoding(parameters, hashVector, H, rowInCol, colInRow)
 
 	if MakeDecision(header, colInRow, outputWordOfVerification) {
-		return true, hashVectorOfVerification, outputWordOfVerification
+		return true, hashVectorOfVerification, outputWordOfVerification, seed
 	}
 
-	return false, hashVectorOfVerification, outputWordOfVerification
+	return false, hashVectorOfVerification, outputWordOfVerification, seed
 }
