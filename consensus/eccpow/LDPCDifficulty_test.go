@@ -57,8 +57,8 @@ func TestDifficultyChange(t *testing.T) {
 		nextLevel := SearchLevel(nextDifficulty)
 
 		fmt.Printf("Current prob : %v, Next Level : %v,  Next difficulty : %v, Next difficulty from table : %v\n\n", Table[currentLevel].miningProb, Table[nextLevel].level, nextDifficulty, ProbToDifficulty(Table[nextLevel].miningProb))
-
 		// currentBlock.ParentHash = outputWord conversion from []int to [32]byte
 		currentLevel = nextLevel
+		fmt.Printf("Current Level : %v\n", currentLevel)
 	}
 }

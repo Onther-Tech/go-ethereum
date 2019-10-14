@@ -1,6 +1,7 @@
 package eccpow
 
 import (
+	"math"
 	"math/big"
 
 	"github.com/Onther-Tech/go-ethereum/core/types"
@@ -94,9 +95,12 @@ func SearchLevel(difficulty *big.Int) int {
 	var currentProb = DifficultyToProb(difficulty)
 	var level int
 
+	distance := 1.0
 	for i := range Table {
-		if currentProb > Table[i].miningProb {
+		if math.Abs(currentProb-Table[i].miningProb) <= distance {
 			level = Table[i].level
+			distance = math.Abs(currentProb - Table[i].miningProb)
+		} else {
 			break
 		}
 	}
