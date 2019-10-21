@@ -42,6 +42,7 @@ func TestDifficultyChange(t *testing.T) {
 	// compare elapse time(timestamp) and parent block's timestamp(0)
 	currentBlock.Difficulty = big.NewInt(0)
 	currentBlock.Time = 0
+	currentBlock.UncleHash = types.EmptyUncleHash
 	for i := 0; i < 5; i++ {
 		fmt.Printf("Current Difficulty : %v\n", currentBlock.Difficulty)
 

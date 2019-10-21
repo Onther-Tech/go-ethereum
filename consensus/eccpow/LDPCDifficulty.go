@@ -1,6 +1,7 @@
 package eccpow
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 
@@ -33,8 +34,8 @@ import (
 // Some weird constants to avoid constant memory allocs for them.
 var (
 	MinimumDifficulty   = ProbToDifficulty(Table[0].miningProb)
-	BlockGenerationTime = big.NewInt(48)
-	Sensitivity         = big.NewInt(128)
+	BlockGenerationTime = big.NewInt(36)
+	Sensitivity         = big.NewInt(8)
 )
 
 // MakeLDPCDifficultyCalculator calculate difficulty using difficulty table
@@ -49,39 +50,41 @@ func MakeLDPCDifficultyCalculator() func(time uint64, parent *types.Header) *big
 
 		// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // BlockGenerationTime
 		x.Sub(bigTime, bigParentTime)
-		//fmt.Printf("block_timestamp - parent_timestamp : %v\n", x)
+		fmt.Printf("block_timestamp - parent_timestamp : %v\n", x)
 
 		x.Div(x, BlockGenerationTime)
-		//fmt.Printf("(block_timestamp - parent_timestamp) / BlockGenerationTime : %v\n", x)
+		fmt.Printf("(block_timestamp - parent_timestamp) / BlockGenerationTime : %v\n", x)
 
 		if parent.UncleHash == types.EmptyUncleHash {
+			fmt.Printf("No uncle\n")
 			x.Sub(big1, x)
 		} else {
+			fmt.Printf("Uncle block exists")
 			x.Sub(big2, x)
 		}
-		//fmt.Printf("(2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) / BlockGenerationTime : %v\n", x)
+		fmt.Printf("(2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) / BlockGenerationTime : %v\n", x)
 
 		// max((2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9, -99)
 		if x.Cmp(bigMinus99) < 0 {
 			x.Set(bigMinus99)
 		}
-		//fmt.Printf("max(1 - (block_timestamp - parent_timestamp) / BlockGenerationTime, -99) : %v\n", x)
+		fmt.Printf("max(1 - (block_timestamp - parent_timestamp) / BlockGenerationTime, -99) : %v\n", x)
 
 		// parent_diff + (parent_diff / Sensitivity * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // BlockGenerationTime), -99))
 		y.Div(parent.Difficulty, Sensitivity)
-		//fmt.Printf("parent.Difficulty / 8 : %v\n", y)
+		fmt.Printf("parent.Difficulty / 8 : %v\n", y)
 
 		x.Mul(y, x)
-		//fmt.Printf("parent.Difficulty / 8 * max(1 - (block_timestamp - parent_timestamp) / BlockGenerationTime, -99) : %v\n", x)
+		fmt.Printf("parent.Difficulty / 8 * max(1 - (block_timestamp - parent_timestamp) / BlockGenerationTime, -99) : %v\n", x)
 
 		x.Add(parent.Difficulty, x)
-		//fmt.Printf("parent.Difficulty - parent.Difficulty / 8 * max(1 - (block_timestamp - parent_timestamp) / BlockGenerationTime, -99) : %v\n", x)
+		fmt.Printf("parent.Difficulty - parent.Difficulty / 8 * max(1 - (block_timestamp - parent_timestamp) / BlockGenerationTime, -99) : %v\n", x)
 
 		// minimum difficulty can ever be (before exponential factor)
 		if x.Cmp(MinimumDifficulty) < 0 {
 			x.Set(MinimumDifficulty)
 		}
-		//fmt.Printf("x : %v, Minimum difficulty : %v\n", x, MinimumDifficulty)
+		fmt.Printf("x : %v, Minimum difficulty : %v\n", x, MinimumDifficulty)
 
 		return x
 	}
