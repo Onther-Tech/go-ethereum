@@ -33,7 +33,8 @@ import (
 // Some weird constants to avoid constant memory allocs for them.
 var (
 	MinimumDifficulty   = ProbToDifficulty(Table[0].miningProb)
-	BlockGenerationTime = big.NewInt(100)
+	BlockGenerationTime = big.NewInt(48)
+	Sensitivity         = big.NewInt(128)
 )
 
 // MakeLDPCDifficultyCalculator calculate difficulty using difficulty table
@@ -66,8 +67,8 @@ func MakeLDPCDifficultyCalculator() func(time uint64, parent *types.Header) *big
 		}
 		//fmt.Printf("max(1 - (block_timestamp - parent_timestamp) / BlockGenerationTime, -99) : %v\n", x)
 
-		// parent_diff + (parent_diff / 8 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // BlockGenerationTime), -99))
-		y.Div(parent.Difficulty, big.NewInt(8))
+		// parent_diff + (parent_diff / Sensitivity * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // BlockGenerationTime), -99))
+		y.Div(parent.Difficulty, Sensitivity)
 		//fmt.Printf("parent.Difficulty / 8 : %v\n", y)
 
 		x.Mul(y, x)
