@@ -304,12 +304,12 @@ type ChainConfig struct {
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
 type EthashConfig struct{}
 
-type EccPoWConfig struct{}
-
 // String implements the stringer interface, returning the consensus engine details.
 func (c *EthashConfig) String() string {
 	return "ethash"
 }
+
+type EccPoWConfig struct{}
 
 func (c *EccPoWConfig) String() string {
 	return "eccpow"

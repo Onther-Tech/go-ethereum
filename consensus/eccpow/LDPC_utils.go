@@ -5,8 +5,6 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
-
-	"github.com/Onther-Tech/go-ethereum/core/types"
 )
 
 //Parameters for matrix and seed
@@ -21,26 +19,27 @@ const (
 )
 
 type Parameters struct {
-	n    int
-	m    int
+	n    int //256
+	m    int //34
 	wc   int
 	wr   int
 	seed int
 }
 
 // setParameters sets n, wc, wr, m, seed return parameters and difficulty level
-func setParameters(header *types.Header) (Parameters, int) {
-	level := SearchLevel(header.Difficulty)
-
+func setParameters(hash []byte) Parameters {
 	parameters := Parameters{
-		n:  Table[level].n,
-		wc: Table[level].wc,
-		wr: Table[level].wr,
+		n:  256,
+		wc: 3,
+		wr: 4,
 	}
 	parameters.m = int(parameters.n * parameters.wc / parameters.wr)
-	parameters.seed = generateSeed(header.ParentHash)
 
-	return parameters, level
+	var arrayHash [32]byte
+	copy(arrayHash[:], hash[:32])
+	parameters.seed = generateSeed(arrayHash)
+
+	return parameters
 }
 
 //generateRandomNonce generate 64bit random nonce with similar way of ethereum block nonce

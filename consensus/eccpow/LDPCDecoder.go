@@ -1,11 +1,7 @@
 package eccpow
 
 import (
-	"encoding/binary"
 	"math"
-
-	"github.com/Onther-Tech/go-ethereum/core/types"
-	"github.com/Onther-Tech/go-ethereum/crypto"
 )
 
 //OptimizedDecoding return hashVector, outputWord, LRrtl and It is 20% faster than previous decoding function when they use same nonce
@@ -74,25 +70,4 @@ func OptimizedDecoding(parameters Parameters, hashVector []int, H, rowInCol, col
 	}
 
 	return hashVector, outputWord, LRrtl
-}
-
-//VerifyOptimizedDecoding return bool, hashVector, outputword, digest which are used for validation
-func VerifyOptimizedDecoding(header *types.Header, hash []byte) (bool, []int, []int, []byte) {
-	parameters, _ := setParameters(header)
-	H := generateH(parameters)
-	colInRow, rowInCol := generateQ(parameters, H)
-
-	seed := make([]byte, 40)
-	copy(seed, hash)
-	binary.LittleEndian.PutUint64(seed[32:], header.Nonce.Uint64())
-	seed = crypto.Keccak512(seed)
-
-	hashVector := generateHv(parameters, seed)
-	hashVectorOfVerification, outputWordOfVerification, _ := OptimizedDecoding(parameters, hashVector, H, rowInCol, colInRow)
-
-	if MakeDecision(header, colInRow, outputWordOfVerification) {
-		return true, hashVectorOfVerification, outputWordOfVerification, seed
-	}
-
-	return false, hashVectorOfVerification, outputWordOfVerification, seed
 }
