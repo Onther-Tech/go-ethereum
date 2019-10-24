@@ -24,11 +24,11 @@ import (
 	"github.com/Onther-Tech/go-ethereum/core/types"
 )
 
-var erreccStopped = errors.New("ecc stopped")
+var erreccpowStopped = errors.New("eccpow stopped")
 
-// API exposes ecc related methods for the RPC interface.
+// API exposes eccpow related methods for the RPC interface.
 type API struct {
-	ecc *ECC // Make sure the mode of ecc is normal.
+	eccpow *EccPoW // Make sure the mode of eccpow is normal.
 }
 
 // GetWork returns a work package for external miner.
@@ -39,9 +39,9 @@ type API struct {
 //   result[2] - 32 bytes hex encoded boundary condition ("target"), 2^256/difficulty
 //   result[3] - hex encoded block number
 func (api *API) GetWork() ([4]string, error) {
-	//if api.ecc.config.PowMode != ModeNormal && api.ecc.config.PowMode != ModeTest {
-	//	return [4]string{}, errors.New("not supported")
-	//}
+	if api.eccpow.config.PowMode != ModeNormal && api.eccpow.config.PowMode != ModeTest {
+		return [4]string{}, errors.New("not supported")
+	}
 
 	var (
 		workCh = make(chan [4]string, 1)
@@ -49,9 +49,9 @@ func (api *API) GetWork() ([4]string, error) {
 	)
 
 	select {
-	case api.ecc.fetchWorkCh <- &sealWork{errc: errc, res: workCh}:
-	case <-api.ecc.exitCh:
-		return [4]string{}, erreccStopped
+	case api.eccpow.fetchWorkCh <- &sealWork{errc: errc, res: workCh}:
+	case <-api.eccpow.exitCh:
+		return [4]string{}, erreccpowStopped
 	}
 
 	select {
@@ -66,20 +66,20 @@ func (api *API) GetWork() ([4]string, error) {
 // It returns an indication if the work was accepted.
 // Note either an invalid solution, a stale work a non-existent work will return false.
 func (api *API) SubmitWork(nonce types.BlockNonce, hash, digest common.Hash) bool {
-	//if api.ecc.config.PowMode != ModeNormal && api.ecc.config.PowMode != ModeTest {
-	//	return false
-	//}
+	if api.eccpow.config.PowMode != ModeNormal && api.eccpow.config.PowMode != ModeTest {
+		return false
+	}
 
 	var errc = make(chan error, 1)
 
 	select {
-	case api.ecc.submitWorkCh <- &mineResult{
+	case api.eccpow.submitWorkCh <- &mineResult{
 		nonce:     nonce,
 		mixDigest: digest,
 		hash:      hash,
 		errc:      errc,
 	}:
-	case <-api.ecc.exitCh:
+	case <-api.eccpow.exitCh:
 		return false
 	}
 
@@ -94,12 +94,15 @@ func (api *API) SubmitWork(nonce types.BlockNonce, hash, digest common.Hash) boo
 // It accepts the miner hash rate and an identifier which must be unique
 // between nodes.
 func (api *API) SubmitHashRate(rate hexutil.Uint64, id common.Hash) bool {
+	if api.eccpow.config.PowMode != ModeNormal && api.eccpow.config.PowMode != ModeTest {
+		return false
+	}
 
 	var done = make(chan struct{}, 1)
 
 	select {
-	case api.ecc.submitRateCh <- &hashrate{done: done, rate: uint64(rate), id: id}:
-	case <-api.ecc.exitCh:
+	case api.eccpow.submitRateCh <- &hashrate{done: done, rate: uint64(rate), id: id}:
+	case <-api.eccpow.exitCh:
 		return false
 	}
 
@@ -109,8 +112,7 @@ func (api *API) SubmitHashRate(rate hexutil.Uint64, id common.Hash) bool {
 	return true
 }
 
-// Geccrate returns the current hashrate for local CPU miner and remote miner.
-func (api *API) Geccrate() uint64 {
-
-	return uint64(api.ecc.Hashrate())
+// Geccpowrate returns the current hashrate for local CPU miner and remote miner.
+func (api *API) Geccpowrate() uint64 {
+	return uint64(api.eccpow.Hashrate())
 }

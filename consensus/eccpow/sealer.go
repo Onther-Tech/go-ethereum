@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	// staleThreshold is the maximum depth of the acceptable stale but valid ecc solution.
+	// staleThreshold is the maximum depth of the acceptable stale but valid eccpow solution.
 	staleThreshold = 7
 )
 
@@ -48,36 +48,36 @@ var (
 
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
-func (ecc *ECC) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (eccpow *EccPoW) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
 	// If we're running a fake PoW, simply return a 0 nonce immediately
-	if ecc.config.PowMode == ModeFake || ecc.config.PowMode == ModeFullFake {
+	if eccpow.config.PowMode == ModeFake || eccpow.config.PowMode == ModeFullFake {
 		header := block.Header()
 		header.Nonce, header.MixDigest = types.BlockNonce{}, common.Hash{}
 		select {
 		case results <- block.WithSeal(header):
 		default:
-			log.Warn("Sealing result is not read by miner", "mode", "fake", "sealhash", ecc.SealHash(block.Header()))
+			log.Warn("Sealing result is not read by miner", "mode", "fake", "sealhash", eccpow.SealHash(block.Header()))
 		}
 		return nil
 	}
 	// If we're running a shared PoW, delegate sealing to it
-	if ecc.shared != nil {
-		return ecc.shared.Seal(chain, block, results, stop)
+	if eccpow.shared != nil {
+		return eccpow.shared.Seal(chain, block, results, stop)
 	}
 	// Create a runner and the multiple search threads it directs
 	abort := make(chan struct{})
 
-	ecc.lock.Lock()
-	threads := ecc.threads
-	if ecc.rand == nil {
+	eccpow.lock.Lock()
+	threads := eccpow.threads
+	if eccpow.rand == nil {
 		seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
 		if err != nil {
-			ecc.lock.Unlock()
+			eccpow.lock.Unlock()
 			return err
 		}
-		ecc.rand = rand.New(rand.NewSource(seed.Int64()))
+		eccpow.rand = rand.New(rand.NewSource(seed.Int64()))
 	}
-	ecc.lock.Unlock()
+	eccpow.lock.Unlock()
 	if threads == 0 {
 		threads = runtime.NumCPU()
 	}
@@ -85,8 +85,8 @@ func (ecc *ECC) Seal(chain consensus.ChainReader, block *types.Block, results ch
 		threads = 0 // Allows disabling local mining without extra logic around local/remote
 	}
 	// Push new work to remote sealer
-	if ecc.workCh != nil {
-		ecc.workCh <- &sealTask{block: block, results: results}
+	if eccpow.workCh != nil {
+		eccpow.workCh <- &sealTask{block: block, results: results}
 	}
 	var (
 		pend   sync.WaitGroup
@@ -96,10 +96,9 @@ func (ecc *ECC) Seal(chain consensus.ChainReader, block *types.Block, results ch
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
-			ecc.mine(block, id, nonce, abort, locals)
-		}(i, uint64(ecc.rand.Int63()))
+			eccpow.mine(block, id, nonce, abort, locals)
+		}(i, uint64(eccpow.rand.Int63()))
 	}
-
 	// Wait until sealing is terminated or a nonce is found
 	go func() {
 		var result *types.Block
@@ -112,33 +111,32 @@ func (ecc *ECC) Seal(chain consensus.ChainReader, block *types.Block, results ch
 			select {
 			case results <- result:
 			default:
-				log.Warn("Sealing result is not read by miner", "mode", "local", "sealhash", ecc.SealHash(block.Header()))
+				log.Warn("Sealing result is not read by miner", "mode", "local", "sealhash", eccpow.SealHash(block.Header()))
 			}
 			close(abort)
-		case <-ecc.update:
+		case <-eccpow.update:
 			// Thread count was changed on user request, restart
 			close(abort)
-			if err := ecc.Seal(chain, block, results, stop); err != nil {
+			if err := eccpow.Seal(chain, block, results, stop); err != nil {
 				log.Error("Failed to restart sealing after update", "err", err)
 			}
 		}
 		// Wait for all miners to terminate and return the block
 		pend.Wait()
 	}()
-
 	return nil
 }
 
 // mine is the actual proof-of-work miner that searches for a nonce starting from
 // seed that results in correct final block difficulty.
-func (ecc *ECC) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
+func (eccpow *EccPoW) mine(block *types.Block, id int, seed uint64, abort chan struct{}, found chan *types.Block) {
 	// Extract some data from the header
 	var (
-		header = block.Header()
-		hash   = ecc.SealHash(header).Bytes()
-		//number  = header.Number.Uint64()
-		//target  = new(big.Int).Div(two256, header.Difficulty)
-
+		header  = block.Header()
+		hash    = eccpow.SealHash(header).Bytes()
+		target  = new(big.Int).Div(two256, header.Difficulty)
+		number  = header.Number.Uint64()
+		dataset = eccpow.dataset(number, false)
 	)
 	// Start generating random nonces until we abort or find a good one
 	var (
@@ -146,45 +144,50 @@ func (ecc *ECC) mine(block *types.Block, id int, seed uint64, abort chan struct{
 		nonce    = seed
 	)
 	logger := log.New("miner", id)
-	logger.Trace("Started ecc search for new nonces", "seed", seed)
+	logger.Trace("Started eccpow search for new nonces", "seed", seed)
 search:
-
-	select {
-	case <-abort:
-		// Mining terminated, update stats and abort
-		logger.Trace("ecc nonce search aborted", "attempts", nonce-seed)
-		ecc.hashrate.Mark(attempts)
-		break search
-
-	default:
-		// We don't have to update hash rate on every nonce, so update after after 2^X nonces
-		attempts++
-		if (attempts % (1 << 15)) == 0 {
-			ecc.hashrate.Mark(attempts)
-			attempts = 0
-		}
-		// Compute the PoW value of this nonce
-
-		_, _, LDPCNonce, digest := RunOptimizedConcurrencyLDPC(header, hash)
-
-		// Correct nonce found, create a new header with it
-		header = types.CopyHeader(header)
-		header.MixDigest = common.BytesToHash(digest)
-		header.Nonce = types.EncodeNonce(LDPCNonce)
-
-		// Seal and return a block (if still needed)
+	for {
 		select {
-		case found <- block.WithSeal(header):
-			logger.Trace("ecc nonce found and reported", "LDPCNonce", LDPCNonce)
 		case <-abort:
-			logger.Trace("ecc nonce found but discarded", "LDPCNonce", LDPCNonce)
+			// Mining terminated, update stats and abort
+			logger.Trace("eccpow nonce search aborted", "attempts", nonce-seed)
+			eccpow.hashrate.Mark(attempts)
+			break search
+
+		default:
+			// We don't have to update hash rate on every nonce, so update after after 2^X nonces
+			attempts++
+			if (attempts % (1 << 15)) == 0 {
+				eccpow.hashrate.Mark(attempts)
+				attempts = 0
+			}
+			// Compute the PoW value of this nonce
+			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
+			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
+				// Correct nonce found, create a new header with it
+				header = types.CopyHeader(header)
+				header.Nonce = types.EncodeNonce(nonce)
+				header.MixDigest = common.BytesToHash(digest)
+
+				// Seal and return a block (if still needed)
+				select {
+				case found <- block.WithSeal(header):
+					logger.Trace("eccpow nonce found and reported", "attempts", nonce-seed, "nonce", nonce)
+				case <-abort:
+					logger.Trace("eccpow nonce found but discarded", "attempts", nonce-seed, "nonce", nonce)
+				}
+				break search
+			}
+			nonce++
 		}
-		break search
 	}
+	// Datasets are unmapped in a finalizer. Ensure that the dataset stays live
+	// during sealing so it's not unmapped while being read.
+	runtime.KeepAlive(dataset)
 }
 
 // remote is a standalone goroutine to handle remote mining related stuff.
-func (ecc *ECC) remote(notify []string, noverify bool) {
+func (eccpow *EccPoW) remote(notify []string, noverify bool) {
 	var (
 		works = make(map[common.Hash]*types.Block)
 		rates = make(map[common.Hash]hashrate)
@@ -234,10 +237,10 @@ func (ecc *ECC) remote(notify []string, noverify bool) {
 	//   result[2], 32 bytes hex encoded boundary condition ("target"), 2^256/difficulty
 	//   result[3], hex encoded block number
 	makeWork := func(block *types.Block) {
-		hash := ecc.SealHash(block.Header())
+		hash := eccpow.SealHash(block.Header())
 
 		currentWork[0] = hash.Hex()
-		currentWork[1] = common.BytesToHash(block.Header().ParentHash.Bytes()).Hex()
+		currentWork[1] = common.BytesToHash(SeedHash(block.NumberU64())).Hex()
 		currentWork[2] = common.BytesToHash(new(big.Int).Div(two256, block.Difficulty()).Bytes()).Hex()
 		currentWork[3] = hexutil.EncodeBig(block.Number())
 
@@ -266,17 +269,17 @@ func (ecc *ECC) remote(notify []string, noverify bool) {
 
 		start := time.Now()
 		if !noverify {
-			if err := ecc.verifySeal(nil, header, true); err != nil {
-				log.Warn("Invalid proof-of-work submitted", "sealhash", sealhash, "elapsed", time.Since(start), "err", err)
+			if err := eccpow.verifySeal(nil, header, true); err != nil {
+				log.Warn("Invalid proof-of-work submitted", "sealhash", sealhash, "elapsed", common.PrettyDuration(time.Since(start)), "err", err)
 				return false
 			}
 		}
 		// Make sure the result channel is assigned.
 		if results == nil {
-			log.Warn("ecc result channel is empty, submitted mining result is rejected")
+			log.Warn("eccpow result channel is empty, submitted mining result is rejected")
 			return false
 		}
-		log.Trace("Verified correct proof-of-work", "sealhash", sealhash, "elapsed", time.Since(start))
+		log.Trace("Verified correct proof-of-work", "sealhash", sealhash, "elapsed", common.PrettyDuration(time.Since(start)))
 
 		// Solutions seems to be valid, return to the miner and notify acceptance.
 		solution := block.WithSeal(header)
@@ -302,7 +305,7 @@ func (ecc *ECC) remote(notify []string, noverify bool) {
 
 	for {
 		select {
-		case work := <-ecc.workCh:
+		case work := <-eccpow.workCh:
 			// Update current work with new received block.
 			// Note same work can be past twice, happens when changing CPU threads.
 			results = work.results
@@ -312,7 +315,7 @@ func (ecc *ECC) remote(notify []string, noverify bool) {
 			// Notify and requested URLs of the new work availability
 			notifyWork()
 
-		case work := <-ecc.fetchWorkCh:
+		case work := <-eccpow.fetchWorkCh:
 			// Return current mining work to remote miner.
 			if currentBlock == nil {
 				work.errc <- errNoMiningWork
@@ -320,7 +323,7 @@ func (ecc *ECC) remote(notify []string, noverify bool) {
 				work.res <- currentWork
 			}
 
-		case result := <-ecc.submitWorkCh:
+		case result := <-eccpow.submitWorkCh:
 			// Verify submitted PoW solution based on maintained mining blocks.
 			if submitWork(result.nonce, result.mixDigest, result.hash) {
 				result.errc <- nil
@@ -328,12 +331,12 @@ func (ecc *ECC) remote(notify []string, noverify bool) {
 				result.errc <- errInvalidSealResult
 			}
 
-		case result := <-ecc.submitRateCh:
+		case result := <-eccpow.submitRateCh:
 			// Trace remote sealer's hash rate by submitted value.
 			rates[result.id] = hashrate{rate: result.rate, ping: time.Now()}
 			close(result.done)
 
-		case req := <-ecc.fetchRateCh:
+		case req := <-eccpow.fetchRateCh:
 			// Gather all hash rate submitted by remote sealer.
 			var total uint64
 			for _, rate := range rates {
@@ -358,10 +361,10 @@ func (ecc *ECC) remote(notify []string, noverify bool) {
 				}
 			}
 
-		case errc := <-ecc.exitCh:
-			// Exit remote loop if ecc is closed and return relevant error.
+		case errc := <-eccpow.exitCh:
+			// Exit remote loop if eccpow is closed and return relevant error.
 			errc <- nil
-			log.Trace("ecc remote sealer is exiting")
+			log.Trace("eccpow remote sealer is exiting")
 			return
 		}
 	}
