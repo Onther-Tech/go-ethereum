@@ -16,10 +16,13 @@ make geth && build/bin/geth \
   --dev \
   --dev.period 1 \
   --dev.faucetkey "$OPERATOR_PRIV_KEY,$KEY0,$KEY1,$KEY2,$KEY3,$CHALLENGER_KEY" \
-  --miner.gastarget 7500000 \
-  --miner.gasprice "10" \
   --rpc \
   --rpcport 8545 \
-  --rpcapi eth,debug,net\
+  --rpcapi eth,debug,net \
+  --rpcaddr 0.0.0.0 \
   --ws \
-  --wsport 8546
+  --wsport 8546 \
+  --wsaddr 0.0.0.0 \
+  --wsapi eth,debug,net \
+  --miner.gastarget 7500000 \
+  --miner.gasprice "10"
