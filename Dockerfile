@@ -5,12 +5,16 @@ RUN apk add --no-cache make gcc musl-dev linux-headers git
 
 ADD . /go-ethereum
 RUN cd /go-ethereum && make geth
+RUN sed 's/make.*/\.\/geth \\/g' /go-ethereum/run.rootchain.sh > /go-ethereum/run.testchain.sh
 
 # Pull Geth into a second stage deploy alpine container
 FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
+COPY --from=builder /go-ethereum/run.testchain.sh /usr/local/bin/
+
+WORKDIR /usr/local/bin
 
 EXPOSE 8545 8546 30303 30303/udp
-ENTRYPOINT ["geth"]
+ENTRYPOINT ["sh", "run.testchain.sh"]
