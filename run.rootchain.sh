@@ -1,3 +1,6 @@
+#!/bin/bash
+RESTART=$1
+
 ADDR0="0xb79749F25Ef64F9AC277A4705887101D3311A0F4"
 ADDR1="0x5E3230019fEd7aB462e3AC277E7709B9b2716b4F"
 ADDR2="0x515B385bDc89bCc29077f2B00a88622883bfb498"
@@ -52,7 +55,7 @@ start_rootchain() {
 
 restart_rootchain() {
   echo "restart root chain node"
-
+  rm -rf $DATADIR/keystore
   make geth && build/bin/geth \
     --datadir $DATADIR \
     --dev \
