@@ -394,7 +394,7 @@ func DeveloperGenesisBlock(period uint64, developers []accounts.Account) *Genesi
 	return &Genesis{
 		Config:     &config,
 		ExtraData:  append(append(make([]byte, 32), developers[0].Address[:]...), make([]byte, 65)...),
-		GasLimit:   8000000,
+		GasLimit:   9000000,
 		Difficulty: big.NewInt(1),
 		Alloc:      alloc,
 	}
